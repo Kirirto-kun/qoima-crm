@@ -32,6 +32,8 @@ import type {
   OnboardTask,
   OnboardTaskCreate,
   PasswordResetConfirm,
+  SalesHotLead,
+  SalesHotLeadCreate,
   SalesLead,
   SalesLeadCreate,
   SalesEvent,
@@ -461,6 +463,20 @@ export const sales = {
     api.patch<SalesLead>(`/sales/${id}/`, payload).then((r) => r.data),
   remove: (id: number) =>
     api.delete<void>(`/sales/${id}/`).then((r) => r.data),
+  hotLeads: {
+    list: () =>
+      api
+        .get<SalesHotLead[] | { results: SalesHotLead[] }>("/sales/hot-leads/")
+        .then((r) => unwrap(r.data)),
+    create: (payload: SalesHotLeadCreate) =>
+      api.post<SalesHotLead>("/sales/hot-leads/", payload).then((r) => r.data),
+    update: (id: number, payload: Partial<SalesHotLeadCreate>) =>
+      api
+        .patch<SalesHotLead>(`/sales/hot-leads/${id}/`, payload)
+        .then((r) => r.data),
+    remove: (id: number) =>
+      api.delete<void>(`/sales/hot-leads/${id}/`).then((r) => r.data),
+  },
   events: {
     list: () =>
       api

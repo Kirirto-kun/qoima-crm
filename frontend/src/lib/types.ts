@@ -450,6 +450,21 @@ export interface IncomeCreate {
 
 /* -------------------- Sales -------------------- */
 
+export interface SalesHotLead {
+  id: number;
+  name: string;
+  contact: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SalesHotLeadCreate {
+  name: string;
+  contact: string;
+  note?: string;
+}
+
 export interface SalesLead {
   id: number;
   lead_name: string;

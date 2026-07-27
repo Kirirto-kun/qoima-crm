@@ -4,7 +4,7 @@ from rest_framework.test import APIClient
 
 from core.enums import UserRole
 from src.employees.models import Employee
-from src.sales.models import EventParticipant, Lead, SalesEvent
+from src.sales.models import EventParticipant, HotLead, Lead, SalesEvent
 
 
 class SalesLeadApiTests(TestCase):
@@ -268,3 +268,78 @@ class SalesLeadApiTests(TestCase):
 
         self.assertEqual(denied_list.status_code, 403)
         self.assertEqual(denied_create.status_code, 403)
+
+    def test_employee_can_manage_hot_leads(self):
+        self.client.force_authenticate(self.employee)
+
+        created = self.client.post(
+            "/api/sales/hot-leads/",
+            {
+                "name": "Айдана",
+                "contact": "+7 700 123 45 67",
+                "note": "Запрос из Instagram",
+            },
+            format="json",
+        )
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.data["name"], "Айдана")
+        self.assertEqual(created.data["contact"], "+7 700 123 45 67")
+        self.assertEqual(HotLead.objects.count(), 1)
+
+        lead_id = created.data["id"]
+
+        listed = self.client.get("/api/sales/hot-leads/")
+        self.assertEqual(listed.status_code, 200)
+        results = listed.data.get("results", listed.data)
+        self.assertEqual(len(results), 1)
+
+        updated = self.client.patch(
+            f"/api/sales/hot-leads/{lead_id}/",
+            {"contact": "client@mail.com"},
+            format="json",
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.data["contact"], "client@mail.com")
+
+        deleted = self.client.delete(f"/api/sales/hot-leads/{lead_id}/")
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(HotLead.objects.filter(id=lead_id).exists())
+
+    def test_hot_lead_requires_name_and_contact(self):
+        self.client.force_authenticate(self.employee)
+
+        response = self.client.post(
+            "/api/sales/hot-leads/",
+            {"name": "  ", "contact": ""},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("name", response.data)
+        self.assertIn("contact", response.data)
+
+    def test_hot_leads_use_sales_permissions(self):
+        self.employee_profile.sales_can_retrieve = False
+        self.employee_profile.sales_can_create = False
+        self.employee_profile.save(
+            update_fields=("sales_can_retrieve", "sales_can_create")
+        )
+        self.client.force_authenticate(self.employee)
+
+        denied_list = self.client.get("/api/sales/hot-leads/")
+        denied_create = self.client.post(
+            "/api/sales/hot-leads/",
+            {"name": "Закрытая заявка", "contact": "+7 700 000 00 00"},
+            format="json",
+        )
+
+        self.assertEqual(denied_list.status_code, 403)
+        self.assertEqual(denied_create.status_code, 403)
+
+    def test_collaborator_cannot_access_hot_leads(self):
+        self.client.force_authenticate(self.collaborator)
+
+        response = self.client.get("/api/sales/hot-leads/")
+
+        self.assertEqual(response.status_code, 403)

@@ -7,9 +7,11 @@ import {
   CalendarDays,
   ChevronRight,
   CircleUserRound,
+  Flame,
   Handshake,
   MessageSquareText,
   Pencil,
+  Phone,
   Plus,
   Search,
   Trash2,
@@ -35,14 +37,16 @@ import {
 import type {
   SalesEvent,
   SalesEventParticipant,
+  SalesHotLead,
   SalesLead,
 } from "@/lib/types";
 import { cn, formatCurrency, formatDate, plural } from "@/lib/utils";
 import { EventParticipantDialog } from "./event-participant-dialog";
+import { HotLeadDialog } from "./hot-lead-dialog";
 import { SalesEventDialog } from "./sales-event-dialog";
 import { SalesLeadDialog } from "./sales-lead-dialog";
 
-type SalesMode = "companies" | "events";
+type SalesMode = "companies" | "hotleads" | "events";
 
 export default function SalesPage() {
   const role = useRole();
@@ -65,6 +69,11 @@ export default function SalesPage() {
     queryFn: sales.list,
     enabled: allowed,
   });
+  const hotLeadsQuery = useQuery({
+    queryKey: ["sales-hot-leads"],
+    queryFn: sales.hotLeads.list,
+    enabled: allowed,
+  });
   const eventsQuery = useQuery({
     queryKey: ["sales-events"],
     queryFn: sales.events.list,
@@ -72,6 +81,10 @@ export default function SalesPage() {
   });
 
   const leads = useMemo(() => leadsQuery.data ?? [], [leadsQuery.data]);
+  const hotLeads = useMemo(
+    () => hotLeadsQuery.data ?? [],
+    [hotLeadsQuery.data]
+  );
   const events = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data]);
   const filteredLeads = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("ru");
@@ -82,6 +95,15 @@ export default function SalesPage() {
       )
     );
   }, [leads, search]);
+  const filteredHotLeads = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("ru");
+    if (!term) return hotLeads;
+    return hotLeads.filter((lead) =>
+      [lead.name, lead.contact, lead.note].some((value) =>
+        value.toLocaleLowerCase("ru").includes(term)
+      )
+    );
+  }, [hotLeads, search]);
   const filteredEvents = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("ru");
     if (!term) return events;
@@ -105,6 +127,13 @@ export default function SalesPage() {
   const companiesCount = new Set(
     leads.map((lead) => lead.company.trim().toLocaleLowerCase("ru"))
   ).size;
+
+  const hotLeadsWithContact = hotLeads.filter(
+    (lead) => lead.contact.trim().length > 0
+  ).length;
+  const hotLeadsWithNote = hotLeads.filter(
+    (lead) => lead.note.trim().length > 0
+  ).length;
 
   const eventParticipants = events.reduce(
     (sum, event) => sum + event.participant_count,
@@ -157,6 +186,16 @@ export default function SalesPage() {
                   </Button>
                 }
               />
+            ) : mode === "hotleads" ? (
+              <HotLeadDialog
+                trigger={
+                  <Button variant="primary" size="sm">
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Добавить заявку</span>
+                    <span className="sm:hidden">Заявка</span>
+                  </Button>
+                }
+              />
             ) : (
               <SalesEventDialog
                 trigger={
@@ -177,16 +216,20 @@ export default function SalesPage() {
           <div>
             <div className="mb-1 flex items-center gap-2 text-[12px] font-medium uppercase tracking-[0.08em] text-tag-blue-fg">
               <span className="h-1.5 w-1.5 rounded-full bg-tag-blue-fg" />
-              Два формата продаж
+              Три формата продаж
             </div>
             <h2 className="font-display text-[24px] text-ink sm:text-[28px]">
               {mode === "companies"
                 ? "Продажи компаниям"
+                : mode === "hotleads"
+                ? "Горячие заявки"
                 : "Групповые события"}
             </h2>
             <p className="mt-1 max-w-2xl text-[13px] text-ink-3">
               {mode === "companies"
                 ? "Компания оплачивает всю сумму сделки — один контакт, одна организация, один бюджет."
+                : mode === "hotleads"
+                ? "Быстрый захват входящего интереса: имя или название, контакт и короткая заметка."
                 : "Создавайте событие на дату, задавайте размер группы и записывайте каждого участника отдельно."}
             </p>
           </div>
@@ -199,6 +242,8 @@ export default function SalesPage() {
               placeholder={
                 mode === "companies"
                   ? "Поиск по контакту или компании"
+                  : mode === "hotleads"
+                  ? "Поиск по имени, контакту или заметке"
                   : "Поиск по событию или участнику"
               }
               className="pl-9"
@@ -207,7 +252,7 @@ export default function SalesPage() {
         </div>
 
         <div
-          className="mb-5 grid max-w-[620px] grid-cols-2 rounded-lg border border-hairline-strong bg-canvas p-1 shadow-card"
+          className="mb-5 grid max-w-[720px] grid-cols-3 rounded-lg border border-hairline-strong bg-canvas p-1 shadow-card"
           role="tablist"
           aria-label="Формат продаж"
         >
@@ -218,6 +263,16 @@ export default function SalesPage() {
             count={leads.length}
             onClick={() => {
               setMode("companies");
+              setSearch("");
+            }}
+          />
+          <ModeTab
+            active={mode === "hotleads"}
+            icon={Flame}
+            label="Горячие заявки"
+            count={hotLeads.length}
+            onClick={() => {
+              setMode("hotleads");
               setSearch("");
             }}
           />
@@ -268,6 +323,51 @@ export default function SalesPage() {
               leads={filteredLeads}
               loading={leadsQuery.isLoading}
               search={search}
+              canUpdate={canUpdate}
+              canDelete={canDelete}
+            />
+          </>
+        ) : mode === "hotleads" ? (
+          <>
+            <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <SalesStat
+                icon={Flame}
+                label="Горячих заявок"
+                value={String(hotLeads.length)}
+                detail={plural(
+                  hotLeads.length,
+                  "активная заявка",
+                  "активные заявки",
+                  "активных заявок"
+                )}
+                accent
+              />
+              <SalesStat
+                icon={Phone}
+                label="С контактом"
+                value={String(hotLeadsWithContact)}
+                detail="телефон или почта указаны"
+              />
+              <SalesStat
+                icon={MessageSquareText}
+                label="С заметкой"
+                value={String(hotLeadsWithNote)}
+                detail="есть контекст по заявке"
+              />
+            </section>
+
+            {hotLeadsQuery.isError && (
+              <LoadError
+                title="Не удалось загрузить горячие заявки"
+                error={hotLeadsQuery.error}
+              />
+            )}
+
+            <HotLeadsTable
+              leads={filteredHotLeads}
+              loading={hotLeadsQuery.isLoading}
+              search={search}
+              canCreate={canCreate}
               canUpdate={canUpdate}
               canDelete={canDelete}
             />
@@ -434,6 +534,173 @@ function CompanySalesTable({
         </tbody>
       </Table>
     </Panel>
+  );
+}
+
+function HotLeadsTable({
+  leads,
+  loading,
+  search,
+  canCreate,
+  canUpdate,
+  canDelete,
+}: {
+  leads: SalesHotLead[];
+  loading: boolean;
+  search: string;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+}) {
+  return (
+    <Panel>
+      <PanelHeader>
+        <PanelTitle>Горячие заявки</PanelTitle>
+        <span className="text-[12px] text-ink-3">
+          {loading
+            ? "Загрузка…"
+            : `${leads.length} ${plural(
+                leads.length,
+                "заявка",
+                "заявки",
+                "заявок"
+              )}`}
+        </span>
+      </PanelHeader>
+
+      <Table>
+        <THead>
+          <TR>
+            <TH>Заявка</TH>
+            <TH>Контакт</TH>
+            <TH>Заметка</TH>
+            <TH className="w-20" />
+          </TR>
+        </THead>
+        <tbody>
+          {leads.map((lead) => (
+            <HotLeadRow
+              key={lead.id}
+              lead={lead}
+              canUpdate={canUpdate}
+              canDelete={canDelete}
+            />
+          ))}
+          {!loading && leads.length === 0 && (
+            <TR>
+              <TD colSpan={4} className="py-14 text-center">
+                <EmptyState
+                  icon={Flame}
+                  title={search ? "Заявки не найдены" : "Пока нет заявок"}
+                  detail={
+                    search
+                      ? "Попробуйте изменить поисковый запрос."
+                      : "Добавьте первую горячую заявку."
+                  }
+                >
+                  {!search && canCreate && (
+                    <HotLeadDialog
+                      trigger={
+                        <Button variant="secondary" size="sm" className="mt-4">
+                          <Plus className="h-3.5 w-3.5" />
+                          Добавить заявку
+                        </Button>
+                      }
+                    />
+                  )}
+                </EmptyState>
+              </TD>
+            </TR>
+          )}
+        </tbody>
+      </Table>
+    </Panel>
+  );
+}
+
+function HotLeadRow({
+  lead,
+  canUpdate,
+  canDelete,
+}: {
+  lead: SalesHotLead;
+  canUpdate: boolean;
+  canDelete: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const removeMutation = useMutation({
+    mutationFn: () => sales.hotLeads.remove(lead.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sales-hot-leads"] });
+      toast.success("Горячая заявка удалена.");
+    },
+    onError: (error) => toast.error(asApiError(error).message),
+  });
+
+  return (
+    <TR>
+      <TD>
+        <div className="min-w-[150px]">
+          <div className="font-medium text-ink">{lead.name}</div>
+          <div className="mt-0.5 text-[11px] text-ink-4">
+            Добавлена {formatDate(lead.created_at)}
+          </div>
+        </div>
+      </TD>
+      <TD>
+        <div className="flex min-w-[160px] items-center gap-2 text-ink-2">
+          <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-surface-2 text-ink-3">
+            <Phone className="h-3.5 w-3.5" />
+          </span>
+          <span className="break-all">{lead.contact}</span>
+        </div>
+      </TD>
+      <TD>
+        <div
+          className={cn(
+            "flex min-w-[220px] max-w-[420px] items-center gap-2 text-[13px]",
+            lead.note ? "text-ink-3" : "text-ink-4"
+          )}
+          title={lead.note || undefined}
+        >
+          <MessageSquareText className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{lead.note || "Без заметки"}</span>
+        </div>
+      </TD>
+      <TD>
+        {(canUpdate || canDelete) && (
+          <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+            {canUpdate && (
+              <HotLeadDialog
+                initial={lead}
+                trigger={
+                  <button
+                    title="Редактировать"
+                    className="grid h-7 w-7 place-items-center rounded text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                }
+              />
+            )}
+            {canDelete && (
+              <button
+                title="Удалить"
+                disabled={removeMutation.isPending}
+                onClick={() => {
+                  if (confirm(`Удалить заявку «${lead.name}»?`)) {
+                    removeMutation.mutate();
+                  }
+                }}
+                className="grid h-7 w-7 place-items-center rounded text-ink-3 transition-colors hover:bg-tag-red-bg/30 hover:text-danger disabled:opacity-40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+      </TD>
+    </TR>
   );
 }
 

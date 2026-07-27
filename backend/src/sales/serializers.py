@@ -1,6 +1,30 @@
 from rest_framework import serializers
 
-from src.sales.models import EventParticipant, Lead, SalesEvent
+from src.sales.models import EventParticipant, HotLead, Lead, SalesEvent
+
+
+class HotLeadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HotLead
+        fields = (
+            "id",
+            "name",
+            "contact",
+            "note",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")
+
+    def validate_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Укажите имя или название.")
+        return value
+
+    def validate_contact(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Укажите контакт — телефон или почту.")
+        return value
 
 
 class LeadSerializer(serializers.ModelSerializer):

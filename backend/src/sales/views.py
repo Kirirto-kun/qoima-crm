@@ -1,12 +1,22 @@
 from core.permissions import SalesPermissions
 from rest_framework import filters, viewsets
 
-from src.sales.models import EventParticipant, Lead, SalesEvent
+from src.sales.models import EventParticipant, HotLead, Lead, SalesEvent
 from src.sales.serializers import (
     EventParticipantSerializer,
+    HotLeadSerializer,
     LeadSerializer,
     SalesEventSerializer,
 )
+
+
+class HotLeadViewSet(viewsets.ModelViewSet):
+    queryset = HotLead.objects.all()
+    serializer_class = HotLeadSerializer
+    permission_classes = (SalesPermissions,)
+    filter_backends = (filters.SearchFilter, filters.OrderingFilter)
+    search_fields = ("name", "contact", "note")
+    ordering_fields = ("name", "contact", "created_at", "updated_at")
 
 
 class LeadViewSet(viewsets.ModelViewSet):

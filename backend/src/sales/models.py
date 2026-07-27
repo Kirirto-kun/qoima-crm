@@ -16,6 +16,20 @@ class Lead(models.Model):
         return f"{self.lead_name} — {self.company}"
 
 
+class HotLead(models.Model):
+    name = models.CharField(max_length=180)
+    contact = models.CharField(max_length=180)
+    note = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+
+    def __str__(self):
+        return f"{self.name} — {self.contact}"
+
+
 class SalesEvent(models.Model):
     name = models.CharField(max_length=180)
     event_date = models.DateField(db_index=True)

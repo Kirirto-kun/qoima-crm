@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from src.sales.models import EventParticipant, Lead, SalesEvent
+from src.sales.models import EventParticipant, HotLead, Lead, SalesEvent
+
+
+@admin.register(HotLead)
+class HotLeadAdmin(admin.ModelAdmin):
+    list_display = ("name", "contact", "created_at")
+    search_fields = ("name", "contact", "note")
+    ordering = ("-created_at",)
 
 
 @admin.register(Lead)
