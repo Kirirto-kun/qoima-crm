@@ -450,11 +450,18 @@ export interface IncomeCreate {
 
 /* -------------------- Sales -------------------- */
 
+export type SalesHotLeadStatus =
+  | "pending"
+  | "in_progress"
+  | "archived"
+  | "deleted";
+
 export interface SalesHotLead {
   id: number;
   name: string;
   contact: string;
   note: string;
+  status: SalesHotLeadStatus;
   created_at: string;
   updated_at: string;
 }
@@ -463,6 +470,7 @@ export interface SalesHotLeadCreate {
   name: string;
   contact: string;
   note?: string;
+  status?: SalesHotLeadStatus;
 }
 
 export interface SalesLead {

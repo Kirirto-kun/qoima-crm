@@ -17,9 +17,21 @@ class Lead(models.Model):
 
 
 class HotLead(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ожидает"
+        IN_PROGRESS = "in_progress", "В процессе"
+        ARCHIVED = "archived", "Архив"
+        DELETED = "deleted", "Удалить"
+
     name = models.CharField(max_length=180)
     contact = models.CharField(max_length=180)
     note = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -3,17 +3,23 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Archive,
   Building2,
   CalendarDays,
+  ChevronDown,
   ChevronRight,
   CircleUserRound,
+  Clock,
   Flame,
   Handshake,
+  Loader2,
   MessageSquareText,
   Pencil,
   Phone,
   Plus,
+  RotateCcw,
   Search,
+  Timer,
   Trash2,
   TrendingUp,
   UserPlus,
@@ -23,8 +29,16 @@ import { toast } from "sonner";
 
 import { PermissionDenied } from "@/components/permission-gate";
 import { Topbar } from "@/components/app-shell/topbar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelHeader, PanelTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
 import { Table, TD, TH, THead, TR } from "@/components/ui/table";
 import { asApiError } from "@/lib/api";
@@ -38,6 +52,7 @@ import type {
   SalesEvent,
   SalesEventParticipant,
   SalesHotLead,
+  SalesHotLeadStatus,
   SalesLead,
 } from "@/lib/types";
 import { cn, formatCurrency, formatDate, plural } from "@/lib/utils";
@@ -47,6 +62,28 @@ import { SalesEventDialog } from "./sales-event-dialog";
 import { SalesLeadDialog } from "./sales-lead-dialog";
 
 type SalesMode = "companies" | "hotleads" | "events";
+
+type BadgeTone = React.ComponentProps<typeof Badge>["tone"];
+
+const HOT_LEAD_STATUS_META: Record<
+  Exclude<SalesHotLeadStatus, "deleted">,
+  {
+    label: string;
+    tone: BadgeTone;
+    icon: React.ComponentType<{ className?: string }>;
+  }
+> = {
+  pending: { label: "Ожидает", tone: "yellow", icon: Clock },
+  in_progress: { label: "В процессе", tone: "blue", icon: Timer },
+  archived: { label: "Архив", tone: "gray", icon: Archive },
+};
+
+// Порядок выбора статуса в выпадающем меню (без «Удалить» — это отдельное действие-корзина).
+const HOT_LEAD_STATUS_OPTIONS: Exclude<SalesHotLeadStatus, "deleted">[] = [
+  "pending",
+  "in_progress",
+  "archived",
+];
 
 export default function SalesPage() {
   const role = useRole();
@@ -63,6 +100,7 @@ export default function SalesPage() {
   const [mode, setMode] = useState<SalesMode>("companies");
   const [search, setSearch] = useState("");
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
+  const [hotLeadsTrash, setHotLeadsTrash] = useState(false);
 
   const leadsQuery = useQuery({
     queryKey: ["sales-leads"],
@@ -70,8 +108,8 @@ export default function SalesPage() {
     enabled: allowed,
   });
   const hotLeadsQuery = useQuery({
-    queryKey: ["sales-hot-leads"],
-    queryFn: sales.hotLeads.list,
+    queryKey: ["sales-hot-leads", hotLeadsTrash ? "trash" : "active"],
+    queryFn: () => sales.hotLeads.list({ trash: hotLeadsTrash }),
     enabled: allowed,
   });
   const eventsQuery = useQuery({
@@ -128,11 +166,14 @@ export default function SalesPage() {
     leads.map((lead) => lead.company.trim().toLocaleLowerCase("ru"))
   ).size;
 
-  const hotLeadsWithContact = hotLeads.filter(
-    (lead) => lead.contact.trim().length > 0
+  const hotLeadsPending = hotLeads.filter(
+    (lead) => lead.status === "pending"
   ).length;
-  const hotLeadsWithNote = hotLeads.filter(
-    (lead) => lead.note.trim().length > 0
+  const hotLeadsInProgress = hotLeads.filter(
+    (lead) => lead.status === "in_progress"
+  ).length;
+  const hotLeadsArchived = hotLeads.filter(
+    (lead) => lead.status === "archived"
   ).length;
 
   const eventParticipants = events.reduce(
@@ -274,6 +315,7 @@ export default function SalesPage() {
             onClick={() => {
               setMode("hotleads");
               setSearch("");
+              setHotLeadsTrash(false);
             }}
           />
           <ModeTab
@@ -329,32 +371,66 @@ export default function SalesPage() {
           </>
         ) : mode === "hotleads" ? (
           <>
-            <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <SalesStat
-                icon={Flame}
-                label="Горячих заявок"
-                value={String(hotLeads.length)}
-                detail={plural(
-                  hotLeads.length,
-                  "активная заявка",
-                  "активные заявки",
-                  "активных заявок"
-                )}
-                accent
-              />
-              <SalesStat
-                icon={Phone}
-                label="С контактом"
-                value={String(hotLeadsWithContact)}
-                detail="телефон или почта указаны"
-              />
-              <SalesStat
-                icon={MessageSquareText}
-                label="С заметкой"
-                value={String(hotLeadsWithNote)}
-                detail="есть контекст по заявке"
-              />
-            </section>
+            {!hotLeadsTrash && (
+              <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <SalesStat
+                  icon={Clock}
+                  label="Ожидают"
+                  value={String(hotLeadsPending)}
+                  detail="в начале списка"
+                  accent
+                />
+                <SalesStat
+                  icon={Timer}
+                  label="В процессе"
+                  value={String(hotLeadsInProgress)}
+                  detail="в работе"
+                />
+                <SalesStat
+                  icon={Archive}
+                  label="В архиве"
+                  value={String(hotLeadsArchived)}
+                  detail="отложенные заявки"
+                />
+              </section>
+            )}
+
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="inline-flex rounded-lg border border-hairline-strong bg-canvas p-1 shadow-card">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHotLeadsTrash(false);
+                    setSearch("");
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all",
+                    !hotLeadsTrash
+                      ? "bg-surface-2 text-ink shadow-[0_1px_2px_rgba(15,15,15,0.06)]"
+                      : "text-ink-3 hover:text-ink"
+                  )}
+                >
+                  <Flame className="h-3.5 w-3.5" />
+                  Активные
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHotLeadsTrash(true);
+                    setSearch("");
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all",
+                    hotLeadsTrash
+                      ? "bg-surface-2 text-ink shadow-[0_1px_2px_rgba(15,15,15,0.06)]"
+                      : "text-ink-3 hover:text-ink"
+                  )}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Корзина
+                </button>
+              </div>
+            </div>
 
             {hotLeadsQuery.isError && (
               <LoadError
@@ -367,6 +443,7 @@ export default function SalesPage() {
               leads={filteredHotLeads}
               loading={hotLeadsQuery.isLoading}
               search={search}
+              trash={hotLeadsTrash}
               canCreate={canCreate}
               canUpdate={canUpdate}
               canDelete={canDelete}
@@ -541,6 +618,7 @@ function HotLeadsTable({
   leads,
   loading,
   search,
+  trash,
   canCreate,
   canUpdate,
   canDelete,
@@ -548,6 +626,7 @@ function HotLeadsTable({
   leads: SalesHotLead[];
   loading: boolean;
   search: string;
+  trash: boolean;
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
@@ -555,7 +634,7 @@ function HotLeadsTable({
   return (
     <Panel>
       <PanelHeader>
-        <PanelTitle>Горячие заявки</PanelTitle>
+        <PanelTitle>{trash ? "Корзина" : "Горячие заявки"}</PanelTitle>
         <span className="text-[12px] text-ink-3">
           {loading
             ? "Загрузка…"
@@ -572,6 +651,7 @@ function HotLeadsTable({
         <THead>
           <TR>
             <TH>Заявка</TH>
+            <TH>Статус</TH>
             <TH>Контакт</TH>
             <TH>Заметка</TH>
             <TH className="w-20" />
@@ -582,23 +662,36 @@ function HotLeadsTable({
             <HotLeadRow
               key={lead.id}
               lead={lead}
+              trash={trash}
               canUpdate={canUpdate}
               canDelete={canDelete}
             />
           ))}
           {!loading && leads.length === 0 && (
             <TR>
-              <TD colSpan={4} className="py-14 text-center">
+              <TD colSpan={5} className="py-14 text-center">
                 <EmptyState
-                  icon={Flame}
-                  title={search ? "Заявки не найдены" : "Пока нет заявок"}
+                  icon={trash ? Trash2 : Flame}
+                  title={
+                    trash
+                      ? search
+                        ? "Ничего не найдено"
+                        : "Корзина пуста"
+                      : search
+                      ? "Заявки не найдены"
+                      : "Пока нет заявок"
+                  }
                   detail={
-                    search
+                    trash
+                      ? search
+                        ? "Попробуйте изменить поисковый запрос."
+                        : "Удалённые заявки появятся здесь — их можно восстановить."
+                      : search
                       ? "Попробуйте изменить поисковый запрос."
                       : "Добавьте первую горячую заявку."
                   }
                 >
-                  {!search && canCreate && (
+                  {!trash && !search && canCreate && (
                     <HotLeadDialog
                       trigger={
                         <Button variant="secondary" size="sm" className="mt-4">
@@ -620,22 +713,43 @@ function HotLeadsTable({
 
 function HotLeadRow({
   lead,
+  trash,
   canUpdate,
   canDelete,
 }: {
   lead: SalesHotLead;
+  trash: boolean;
   canUpdate: boolean;
   canDelete: boolean;
 }) {
   const queryClient = useQueryClient();
+
+  const statusMutation = useMutation({
+    mutationFn: (status: SalesHotLeadStatus) =>
+      sales.hotLeads.update(lead.id, { status }),
+    onSuccess: (_data, status) => {
+      queryClient.invalidateQueries({ queryKey: ["sales-hot-leads"] });
+      if (status === "deleted") {
+        toast.success("Заявка перемещена в корзину.");
+      } else if (trash) {
+        toast.success("Заявка восстановлена.");
+      } else {
+        toast.success("Статус обновлён.");
+      }
+    },
+    onError: (error) => toast.error(asApiError(error).message),
+  });
+
   const removeMutation = useMutation({
     mutationFn: () => sales.hotLeads.remove(lead.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sales-hot-leads"] });
-      toast.success("Горячая заявка удалена.");
+      toast.success("Заявка удалена навсегда.");
     },
     onError: (error) => toast.error(asApiError(error).message),
   });
+
+  const busy = statusMutation.isPending || removeMutation.isPending;
 
   return (
     <TR>
@@ -646,6 +760,20 @@ function HotLeadRow({
             Добавлена {formatDate(lead.created_at)}
           </div>
         </div>
+      </TD>
+      <TD>
+        {trash ? (
+          <Badge tone="red" dot>
+            В корзине
+          </Badge>
+        ) : (
+          <HotLeadStatusControl
+            lead={lead}
+            canUpdate={canUpdate}
+            busy={busy}
+            onChange={(status) => statusMutation.mutate(status)}
+          />
+        )}
       </TD>
       <TD>
         <div className="flex min-w-[160px] items-center gap-2 text-ink-2">
@@ -668,39 +796,133 @@ function HotLeadRow({
         </div>
       </TD>
       <TD>
-        {(canUpdate || canDelete) && (
-          <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-            {canUpdate && (
-              <HotLeadDialog
-                initial={lead}
-                trigger={
-                  <button
-                    title="Редактировать"
-                    className="grid h-7 w-7 place-items-center rounded text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                }
-              />
-            )}
-            {canDelete && (
-              <button
-                title="Удалить"
-                disabled={removeMutation.isPending}
-                onClick={() => {
-                  if (confirm(`Удалить заявку «${lead.name}»?`)) {
-                    removeMutation.mutate();
+        <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+          {trash ? (
+            <>
+              {canUpdate && (
+                <button
+                  title="Восстановить"
+                  disabled={busy}
+                  onClick={() => statusMutation.mutate("pending")}
+                  className="grid h-7 w-7 place-items-center rounded text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  title="Удалить навсегда"
+                  disabled={busy}
+                  onClick={() => {
+                    if (confirm(`Удалить заявку «${lead.name}» навсегда?`)) {
+                      removeMutation.mutate();
+                    }
+                  }}
+                  className="grid h-7 w-7 place-items-center rounded text-ink-3 transition-colors hover:bg-tag-red-bg/30 hover:text-danger disabled:opacity-40"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {canUpdate && (
+                <HotLeadDialog
+                  initial={lead}
+                  trigger={
+                    <button
+                      title="Редактировать"
+                      className="grid h-7 w-7 place-items-center rounded text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
                   }
-                }}
-                className="grid h-7 w-7 place-items-center rounded text-ink-3 transition-colors hover:bg-tag-red-bg/30 hover:text-danger disabled:opacity-40"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        )}
+                />
+              )}
+              {canDelete && (
+                <button
+                  title="В корзину"
+                  disabled={busy}
+                  onClick={() => statusMutation.mutate("deleted")}
+                  className="grid h-7 w-7 place-items-center rounded text-ink-3 transition-colors hover:bg-tag-red-bg/30 hover:text-danger disabled:opacity-40"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </TD>
     </TR>
+  );
+}
+
+function HotLeadStatusControl({
+  lead,
+  canUpdate,
+  busy,
+  onChange,
+}: {
+  lead: SalesHotLead;
+  canUpdate: boolean;
+  busy: boolean;
+  onChange: (status: SalesHotLeadStatus) => void;
+}) {
+  const current =
+    lead.status === "deleted" ? "archived" : lead.status;
+  const meta = HOT_LEAD_STATUS_META[current];
+  const Icon = meta.icon;
+
+  if (!canUpdate) {
+    return (
+      <Badge tone={meta.tone} dot>
+        {meta.label}
+      </Badge>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={busy}
+          className={cn(
+            "inline-flex h-[26px] items-center gap-1.5 rounded-md border border-hairline-strong bg-canvas pl-2 pr-1.5 text-[12px] font-medium text-ink-2 transition-colors hover:bg-surface-2 disabled:opacity-50",
+            "outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          )}
+        >
+          {busy ? (
+            <Loader2 className="h-3 w-3 animate-spin text-ink-3" />
+          ) : (
+            <Icon className="h-3 w-3 text-ink-3" />
+          )}
+          <span>{meta.label}</span>
+          <ChevronDown className="h-3 w-3 text-ink-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[180px]">
+        <DropdownMenuRadioGroup
+          value={current}
+          onValueChange={(value) => {
+            if (value !== lead.status) {
+              onChange(value as SalesHotLeadStatus);
+            }
+          }}
+        >
+          {HOT_LEAD_STATUS_OPTIONS.map((status) => {
+            const optionMeta = HOT_LEAD_STATUS_META[status];
+            const OptionIcon = optionMeta.icon;
+            return (
+              <DropdownMenuRadioItem key={status} value={status}>
+                <OptionIcon className="h-3.5 w-3.5 text-ink-3" />
+                {optionMeta.label}
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

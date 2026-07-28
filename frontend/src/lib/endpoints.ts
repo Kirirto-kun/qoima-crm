@@ -464,9 +464,12 @@ export const sales = {
   remove: (id: number) =>
     api.delete<void>(`/sales/${id}/`).then((r) => r.data),
   hotLeads: {
-    list: () =>
+    list: (options?: { trash?: boolean }) =>
       api
-        .get<SalesHotLead[] | { results: SalesHotLead[] }>("/sales/hot-leads/")
+        .get<SalesHotLead[] | { results: SalesHotLead[] }>(
+          "/sales/hot-leads/",
+          options?.trash ? { params: { trash: 1 } } : undefined
+        )
         .then((r) => unwrap(r.data)),
     create: (payload: SalesHotLeadCreate) =>
       api.post<SalesHotLead>("/sales/hot-leads/", payload).then((r) => r.data),
