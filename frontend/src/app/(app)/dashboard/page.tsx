@@ -712,13 +712,26 @@ function EmployeeDashboard({
               {finance.wallet && (
                 <StatCard
                   accent
-                  label={`Кошелёк · ${finance.wallet.name}`}
+                  label={
+                    (finance.wallet.wallets_count ?? 1) > 1
+                      ? `Кошельки · ${finance.wallet.wallets_count}`
+                      : `Кошелёк · ${finance.wallet.name}`
+                  }
                   value={
                     finance.wallet.can_view_balance
-                      ? formatCurrency(finance.wallet.balance)
+                      ? formatCurrency(
+                          finance.wallet.total_balance ?? finance.wallet.balance
+                        )
                       : MASKED_AMOUNT
                   }
-                  caption="Текущий остаток компании"
+                  caption={
+                    (finance.wallet.wallets_count ?? 1) > 1 &&
+                    finance.wallet.can_view_balance
+                      ? `Основной «${finance.wallet.name}»: ${formatCurrency(
+                          finance.wallet.balance
+                        )}`
+                      : "Текущий остаток компании"
+                  }
                 />
               )}
               <StatCard

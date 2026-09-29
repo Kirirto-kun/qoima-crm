@@ -196,3 +196,10 @@ class WalletPermissions(EmployeeFlagPermission):
         "partial_update": "wallets_can_update",
         "destroy": "wallets_can_delete",
     }
+
+
+class WalletTransferPermissions(EmployeeFlagPermission):
+    permission_map = {
+        "create": "wallets_can_update",
+        "destroy": "wallets_can_update",
+    }

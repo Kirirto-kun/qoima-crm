@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input, Field, Textarea } from "@/components/ui/input";
 import { TypeCombobox } from "@/components/ui/type-combobox";
+import { WalletPicker } from "@/components/wallet-picker";
 import { spendings } from "@/lib/endpoints";
 import { asApiError } from "@/lib/api";
 import {
@@ -34,6 +35,7 @@ const schema = z.object({
       message: "Сумма должна быть положительной.",
     }),
   note: z.string().optional(),
+  wallet: z.number().nullable(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -72,6 +74,7 @@ export function SpendingFormDialog({
       type: initial?.type ?? "infrastructure",
       amount: initial?.amount ?? "",
       note: initial?.note ?? "",
+      wallet: initial?.wallet ?? null,
     },
   });
 
@@ -91,18 +94,34 @@ export function SpendingFormDialog({
         type: values.type.trim(),
         amount: values.amount,
         note: values.note?.trim() || undefined,
+        wallet: values.wallet,
       };
       return initial
         ? spendings.update(initial.id, payload)
         : spendings.create(payload);
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (saved, vars) => {
       qc.invalidateQueries({ queryKey: ["spendings"] });
       qc.invalidateQueries({ queryKey: ["spendings-analytics"] });
+      qc.invalidateQueries({ queryKey: ["wallets"] });
+      qc.invalidateQueries({ queryKey: ["wallets-current"] });
+      qc.invalidateQueries({ queryKey: ["wallets-logs"] });
+      qc.invalidateQueries({ queryKey: ["wallets-analytics"] });
       rememberType(vars.type);
-      toast.success(initial ? "Запись обновлена." : "Расход записан.");
+      toast.success(
+        initial
+          ? "Запись обновлена."
+          : `Расход записан${saved.wallet_name ? ` · ${saved.wallet_name}` : ""}.`
+      );
       setOpen(false);
-      if (!initial) reset({ name: "", type: "infrastructure", amount: "", note: "" });
+      if (!initial)
+        reset({
+          name: "",
+          type: "infrastructure",
+          amount: "",
+          note: "",
+          wallet: vars.wallet,
+        });
     },
     onError: (err) => toast.error(asApiError(err).message),
   });
@@ -248,6 +267,18 @@ export function SpendingFormDialog({
               </p>
             )}
           </Field>
+
+          <Controller
+            control={control}
+            name="wallet"
+            render={({ field }) => (
+              <WalletPicker
+                label="Откуда списать"
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
 
           <Field label="Заметка">
             <Textarea

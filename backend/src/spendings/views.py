@@ -32,7 +32,7 @@ class SpendingViewSet(
     BaseSerializerMixin,
     viewsets.ModelViewSet,
 ):
-    queryset = Spending.objects.all()
+    queryset = Spending.objects.select_related("wallet").order_by("-date_spend", "-id")
     serializer_class = SpendingSerializer
     permission_classes = (AccountingPermissions,)
 
@@ -47,32 +47,57 @@ class SpendingViewSet(
     def perform_update(self, serializer):
         with transaction.atomic():
             old_amount = serializer.instance.amount
+            old_wallet_id = serializer.instance.wallet_id
             spending = serializer.save()
-            record_spending_updated(spending, old_amount=old_amount, actor=self.request.user)
+            record_spending_updated(
+                spending,
+                old_amount=old_amount,
+                old_wallet_id=old_wallet_id,
+                actor=self.request.user,
+            )
 
     def perform_destroy(self, instance):
         with transaction.atomic():
             record_spending_deleted(instance, actor=self.request.user)
             instance.delete()
 
+    def _filtered_without(self, *ignored_params):
+        params = self.request.query_params.copy()
+
+        for param in ignored_params:
+            params.pop(param, None)
+
+        return SpendingFilter(
+            params,
+            queryset=self.get_queryset(),
+            request=self.request,
+        ).qs
+
     @action(detail=False, methods=["get"], url_path="analytics")
     def analytics(self, request):
-        spending = self.get_queryset()
-        filter_spending = self.filter_queryset(spending)
-
-        by_type = spending.values("type").annotate(
+        filter_spending = self.filter_queryset(self.get_queryset())
+        by_type = self._filtered_without("type").values("type").annotate(
             count=Count("id"),
             total_amount=Sum("amount"),
-        )
+        ).order_by("-total_amount")
 
         by_date = filter_spending.values("date_spend").annotate(
             count=Count("id"),
             total_amount=Sum("amount"),
-        )
+        ).order_by("date_spend")
 
-        total = spending.aggregate(
+        by_wallet = self._filtered_without("wallet").values(
+            "wallet_id",
+            "wallet__name",
+        ).annotate(
             count=Count("id"),
             total_amount=Sum("amount"),
+        ).order_by("-total_amount")
+
+        total = filter_spending.aggregate(
+            count=Count("id"),
+            total_amount=Sum("amount"),
+            max_amount=Max("amount"),
             date_from=Min("date_spend"),
             date_to=Max("date_spend"),
         )
@@ -81,6 +106,15 @@ class SpendingViewSet(
             "total": total,
             "by_date": list(by_date),
             "by_type": list(by_type),
+            "by_wallet": [
+                {
+                    "wallet": row["wallet_id"],
+                    "wallet_name": row["wallet__name"],
+                    "count": row["count"],
+                    "total_amount": row["total_amount"],
+                }
+                for row in by_wallet
+            ],
             "meta": {
                 "date_from": total["date_from"],
                 "date_to": total["date_to"],
@@ -98,7 +132,10 @@ class MonthlyObligationViewSet(
     permission_classes = (AccountingPermissions,)
 
     def get_queryset(self):
-        queryset = MonthlyObligation.objects.order_by("due_date", "id")
+        queryset = MonthlyObligation.objects.select_related("wallet").order_by(
+            "due_date",
+            "id",
+        )
         request = getattr(self, "request", None)
         params = getattr(request, "query_params", {})
         active = params.get("active")

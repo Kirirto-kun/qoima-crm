@@ -5,6 +5,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from src.spendings.models import MonthlyObligation, Spending
+from src.wallets.serializers import WalletSourceField, validate_wallet_source
 
 
 def next_due_date_for_day(charge_day: int, today=None) -> date:
@@ -22,6 +23,9 @@ def next_due_date_for_day(charge_day: int, today=None) -> date:
 
 
 class SpendingSerializer(serializers.ModelSerializer):
+    wallet = WalletSourceField()
+    wallet_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Spending
         fields = (
@@ -31,11 +35,21 @@ class SpendingSerializer(serializers.ModelSerializer):
             "amount",
             "date_spend",
             "note",
+            "wallet",
+            "wallet_name",
         )
+
+    def get_wallet_name(self, obj):
+        return obj.wallet.name if obj.wallet_id else None
+
+    def validate_wallet(self, value):
+        return validate_wallet_source(self, value)
 
 
 class MonthlyObligationSerializer(serializers.ModelSerializer):
     is_excluded_current_month = serializers.SerializerMethodField()
+    wallet = WalletSourceField()
+    wallet_name = serializers.SerializerMethodField()
 
     class Meta:
         model = MonthlyObligation
@@ -52,6 +66,8 @@ class MonthlyObligationSerializer(serializers.ModelSerializer):
             "excluded_for",
             "is_excluded_current_month",
             "last_spending",
+            "wallet",
+            "wallet_name",
             "created_at",
             "updated_at",
         )
@@ -64,6 +80,12 @@ class MonthlyObligationSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+    def get_wallet_name(self, obj):
+        return obj.wallet.name if obj.wallet_id else None
+
+    def validate_wallet(self, value):
+        return validate_wallet_source(self, value)
 
     def get_is_excluded_current_month(self, obj) -> bool:
         today = timezone.localdate()

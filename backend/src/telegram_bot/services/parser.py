@@ -21,6 +21,8 @@ class ParsedCommand:
     period: str = ""
     date_from: date | None = None
     date_to: date | None = None
+    wallet_token: str = ""
+    target_token: str = ""
 
 
 class CommandParser:
@@ -43,8 +45,11 @@ class CommandParser:
         if command == "whoami":
             return ParsedCommand(name="whoami", raw=raw)
 
-        if command in {"wallet", "balance"}:
-            return ParsedCommand(name="wallet", raw=raw)
+        if command in {"wallet", "wallets", "balance"}:
+            return ParsedCommand(name="wallet", raw=raw, wallet_token=rest.strip())
+
+        if command in {"transfer", "move"}:
+            return self._parse_transfer(raw, rest)
 
         if command == "income":
             return self._parse_money_command("income", raw, rest)
@@ -88,6 +93,30 @@ class CommandParser:
             amount=amount,
             label=label or "telegram",
             record_date=record_date or timezone.localdate(),
+        )
+
+    def _parse_transfer(self, raw: str, rest: str) -> ParsedCommand:
+        usage = "Use /transfer <amount> <from_wallet> <to_wallet> [note]."
+        match = self.AMOUNT_RE.match(rest)
+
+        if not match:
+            raise CommandParseError(usage)
+
+        amount = self._parse_amount(match.group("amount"))
+        tail, record_date = self._extract_tail_date(match.group("tail"))
+        parts = tail.split()
+
+        if len(parts) < 2:
+            raise CommandParseError(usage)
+
+        return ParsedCommand(
+            name="transfer",
+            raw=raw,
+            amount=amount,
+            label=" ".join(parts[2:]).strip(),
+            record_date=record_date or timezone.localdate(),
+            wallet_token=parts[0],
+            target_token=parts[1],
         )
 
     def _parse_report(self, raw: str, rest: str) -> ParsedCommand:

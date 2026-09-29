@@ -28,6 +28,7 @@ import type {
   MonthlyObligationCreate,
   Onboard,
   OnboardCreate,
+  Paginated,
   OnboardUpdate,
   OnboardTask,
   OnboardTaskCreate,
@@ -52,8 +53,11 @@ import type {
   UserUpdate,
   UserRole,
   Wallet,
+  WalletAnalytics,
   WalletCreate,
   WalletLog,
+  WalletTransfer,
+  WalletTransferCreate,
 } from "./types";
 
 /* ---------------- Auth ---------------- */
@@ -334,7 +338,16 @@ function spendingsParams(filters?: SpendingFilters) {
   if (filters?.from_date) params.from_date = filters.from_date;
   if (filters?.to_date) params.to_date = filters.to_date;
   if (filters?.type) params.type = filters.type;
+  if (filters?.wallet) params.wallet = String(filters.wallet);
+  if (filters?.search) params.search = filters.search;
   return params;
+}
+
+/** Normalises a DRF list response (paginated or not) into a page object. */
+function asPage<T>(data: T[] | Paginated<T>): Paginated<T> {
+  return Array.isArray(data)
+    ? { count: data.length, next: null, previous: null, results: data }
+    : data;
 }
 
 export const spendings = {
@@ -344,6 +357,12 @@ export const spendings = {
         params: spendingsParams(filters),
       })
       .then((r) => unwrap(r.data)),
+  page: (filters: SpendingFilters | undefined, page: number) =>
+    api
+      .get<Spending[] | Paginated<Spending>>("/spendings/", {
+        params: { ...spendingsParams(filters), page },
+      })
+      .then((r) => asPage(r.data)),
   retrieve: (id: number) =>
     api.get<Spending>(`/spendings/${id}/`).then((r) => r.data),
   create: (payload: SpendingCreate) =>
@@ -424,6 +443,8 @@ function incomesParams(filters?: IncomeFilters) {
   if (filters?.from_date) params.from_date = filters.from_date;
   if (filters?.to_date) params.to_date = filters.to_date;
   if (filters?.type) params.type = filters.type;
+  if (filters?.wallet) params.wallet = String(filters.wallet);
+  if (filters?.search) params.search = filters.search;
   return params;
 }
 
@@ -434,6 +455,12 @@ export const incomes = {
         params: incomesParams(filters),
       })
       .then((r) => unwrap(r.data)),
+  page: (filters: IncomeFilters | undefined, page: number) =>
+    api
+      .get<Income[] | Paginated<Income>>("/incomes/", {
+        params: { ...incomesParams(filters), page },
+      })
+      .then((r) => asPage(r.data)),
   retrieve: (id: number) =>
     api.get<Income>(`/incomes/${id}/`).then((r) => r.data),
   create: (payload: IncomeCreate) =>
@@ -558,6 +585,21 @@ export const wallets = {
     api
       .get<Wallet[] | { results: Wallet[] }>("/wallets/")
       .then((r) => unwrap(r.data)),
+  active: () =>
+    api
+      .get<Wallet[] | { results: Wallet[] }>("/wallets/", {
+        params: { active: "true" },
+      })
+      .then((r) => unwrap(r.data)),
+  analytics: (filters?: { from_date?: string; to_date?: string }) =>
+    api
+      .get<WalletAnalytics>("/wallets/analytics/", {
+        params: {
+          from_date: filters?.from_date || undefined,
+          to_date: filters?.to_date || undefined,
+        },
+      })
+      .then((r) => r.data),
   current: () =>
     api.get<Wallet>("/wallets/current/").then((r) => r.data),
   retrieve: (id: number) =>
@@ -572,4 +614,25 @@ export const wallets = {
     api
       .get<WalletLog[] | { results: WalletLog[] }>("/wallets/logs/")
       .then((r) => unwrap(r.data)),
+  logsPage: (wallet: number | undefined, page: number) =>
+    api
+      .get<WalletLog[] | Paginated<WalletLog>>("/wallets/logs/", {
+        params: { wallet: wallet || undefined, page },
+      })
+      .then((r) => asPage(r.data)),
+  transfers: {
+    page: (wallet: number | undefined, page: number) =>
+      api
+        .get<WalletTransfer[] | Paginated<WalletTransfer>>(
+          "/wallets/transfers/",
+          { params: { wallet: wallet || undefined, page } }
+        )
+        .then((r) => asPage(r.data)),
+    create: (payload: WalletTransferCreate) =>
+      api
+        .post<WalletTransfer>("/wallets/transfers/", payload)
+        .then((r) => r.data),
+    remove: (id: number) =>
+      api.delete<void>(`/wallets/transfers/${id}/`).then((r) => r.data),
+  },
 };

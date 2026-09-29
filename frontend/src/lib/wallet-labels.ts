@@ -26,6 +26,9 @@ const META: Record<WalletLogAction, WalletActionMeta> = {
   spending_created: { label: "Расход добавлен", tone: "red", positive: false },
   spending_updated: { label: "Расход изменён", tone: "yellow", positive: false },
   spending_deleted: { label: "Расход удалён", tone: "orange", positive: true },
+  transfer_out: { label: "Перевод: списание", tone: "purple", positive: false },
+  transfer_in: { label: "Перевод: зачисление", tone: "blue", positive: true },
+  transfer_deleted: { label: "Перевод отменён", tone: "gray", positive: true },
 };
 
 const FALLBACK: WalletActionMeta = {

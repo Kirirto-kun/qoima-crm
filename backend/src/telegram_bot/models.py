@@ -75,6 +75,7 @@ class TelegramCommandLog(models.Model):
         DENIED = "denied", "Denied"
         FAILED = "failed", "Failed"
         IGNORED = "ignored", "Ignored"
+        PENDING = "pending", "Pending"
 
     update_id = models.BigIntegerField(unique=True, null=True, blank=True)
     chat = models.ForeignKey(

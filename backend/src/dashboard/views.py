@@ -205,10 +205,14 @@ class DashboardViewSet(viewsets.GenericViewSet):
     def _wallet(self):
         wallet = Wallet.default()
         can_view_balance = can_view_wallet_balance(self.request.user)
+        active = Wallet.objects.filter(is_active=True)
+        total_balance = active.aggregate(total=Sum("balance"))["total"] or ZERO_AMOUNT
         return {
             "id": wallet.id,
             "name": wallet.name,
             "balance": wallet.balance if can_view_balance else None,
+            "total_balance": total_balance if can_view_balance else None,
+            "wallets_count": active.count(),
             "can_view_balance": can_view_balance,
             "updated_at": wallet.updated_at,
         }

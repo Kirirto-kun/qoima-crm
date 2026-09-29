@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Field, Textarea } from "@/components/ui/input";
+import { WalletPicker } from "@/components/wallet-picker";
 import { incomes } from "@/lib/endpoints";
 import { asApiError } from "@/lib/api";
 import { allKnownIncomeTypes, typeMetaForIncome } from "@/lib/income-type-meta";
@@ -33,6 +34,7 @@ export function IncomeFormDialog({
   const [type, setType] = useState(initial?.type ?? "deal_payment");
   const [amount, setAmount] = useState(initial?.amount ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
+  const [wallet, setWallet] = useState<number | null>(initial?.wallet ?? null);
 
   const meta = typeMetaForIncome(type);
 
@@ -43,15 +45,24 @@ export function IncomeFormDialog({
         type: type.trim(),
         amount,
         note: note.trim() || undefined,
+        wallet,
       };
       return initial
         ? incomes.update(initial.id, payload)
         : incomes.create(payload);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       qc.invalidateQueries({ queryKey: ["incomes"] });
       qc.invalidateQueries({ queryKey: ["incomes-analytics"] });
-      toast.success(initial ? "Запись обновлена." : "Доход записан.");
+      qc.invalidateQueries({ queryKey: ["wallets"] });
+      qc.invalidateQueries({ queryKey: ["wallets-current"] });
+      qc.invalidateQueries({ queryKey: ["wallets-logs"] });
+      qc.invalidateQueries({ queryKey: ["wallets-analytics"] });
+      toast.success(
+        initial
+          ? "Запись обновлена."
+          : `Доход записан${saved.wallet_name ? ` · ${saved.wallet_name}` : ""}.`
+      );
       setOpen(false);
       if (!initial) {
         setName("");
@@ -167,6 +178,8 @@ export function IncomeFormDialog({
               </span>
             </div>
           </Field>
+
+          <WalletPicker label="Куда зачислить" value={wallet} onChange={setWallet} />
 
           <Field label="Заметка">
             <Textarea

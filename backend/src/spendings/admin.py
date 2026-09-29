@@ -5,8 +5,8 @@ from src.spendings.models import MonthlyObligation, Spending
 
 @admin.register(Spending)
 class SpendingAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "type", "amount", "date_spend")
-    list_filter = ("type", "date_spend")
+    list_display = ("id", "name", "type", "amount", "wallet", "date_spend")
+    list_filter = ("type", "wallet", "date_spend")
     search_fields = ("name", "type", "note")
 
 

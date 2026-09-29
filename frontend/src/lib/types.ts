@@ -406,6 +406,8 @@ export interface Income {
    */
   date_earned: string;
   note: string | null;
+  wallet: number | null;
+  wallet_name: string | null;
 }
 
 export interface IncomeByType {
@@ -420,15 +422,24 @@ export interface IncomeByDate {
   total_amount: string;
 }
 
+export interface ByWalletRow {
+  wallet: number | null;
+  wallet_name: string | null;
+  count: number;
+  total_amount: string;
+}
+
 export interface IncomeAnalytics {
   total: {
     count: number;
     total_amount: string | null;
+    max_amount?: string | null;
     date_from: string | null;
     date_to: string | null;
   };
   by_date: IncomeByDate[];
   by_type: IncomeByType[];
+  by_wallet?: ByWalletRow[];
   meta: {
     date_from: string | null;
     date_to: string | null;
@@ -439,6 +450,8 @@ export interface IncomeFilters {
   from_date?: string;
   to_date?: string;
   type?: string;
+  wallet?: number;
+  search?: string;
 }
 
 export interface IncomeCreate {
@@ -446,6 +459,7 @@ export interface IncomeCreate {
   type: string;
   amount: string;
   note?: string;
+  wallet?: number | null;
 }
 
 /* -------------------- Sales -------------------- */
@@ -538,6 +552,8 @@ export interface Spending {
   amount: string;
   date_spend: string;
   note: string | null;
+  wallet: number | null;
+  wallet_name: string | null;
 }
 
 export interface SpendingByType {
@@ -556,11 +572,13 @@ export interface SpendingAnalytics {
   total: {
     count: number;
     total_amount: string | null;
+    max_amount?: string | null;
     date_from: string | null;
     date_to: string | null;
   };
   by_date: SpendingByDate[];
   by_type: SpendingByType[];
+  by_wallet?: ByWalletRow[];
   meta: {
     date_from: string | null;
     date_to: string | null;
@@ -571,6 +589,8 @@ export interface SpendingFilters {
   from_date?: string;
   to_date?: string;
   type?: string;
+  wallet?: number;
+  search?: string;
 }
 
 export interface SpendingCreate {
@@ -578,6 +598,14 @@ export interface SpendingCreate {
   type: string;
   amount: string;
   note?: string;
+  wallet?: number | null;
+}
+
+export interface Paginated<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
 }
 
 export interface MonthlyObligation {
@@ -593,6 +621,8 @@ export interface MonthlyObligation {
   excluded_for: string | null;
   is_excluded_current_month: boolean;
   last_spending: number | null;
+  wallet: number | null;
+  wallet_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -605,6 +635,7 @@ export interface MonthlyObligationCreate {
   charge_day: number;
   is_active?: boolean;
   note?: string;
+  wallet?: number | null;
 }
 
 export interface MonthlyObligationByType {
@@ -632,6 +663,7 @@ export interface MonthlyObligationActionResult {
 export interface Wallet {
   id: number;
   name: string;
+  code: string;
   balance: string | null;
   can_view_balance: boolean;
   is_default: boolean;
@@ -642,6 +674,7 @@ export interface Wallet {
 
 export interface WalletCreate {
   name: string;
+  code?: string;
   balance?: string;
   is_default?: boolean;
   is_active?: boolean;
@@ -657,7 +690,10 @@ export type WalletLogAction =
   | "income_deleted"
   | "spending_created"
   | "spending_updated"
-  | "spending_deleted";
+  | "spending_deleted"
+  | "transfer_out"
+  | "transfer_in"
+  | "transfer_deleted";
 
 export interface WalletLog {
   id: number;
@@ -674,6 +710,75 @@ export interface WalletLog {
   related_object_type: string;
   related_object_id: string;
   created_at: string;
+}
+
+export interface WalletTransfer {
+  id: number;
+  from_wallet: number;
+  from_wallet_name: string;
+  to_wallet: number;
+  to_wallet_name: string;
+  amount: string | null;
+  date: string;
+  note: string;
+  actor: number | null;
+  actor_detail: User | null;
+  can_view_balance: boolean;
+  created_at: string;
+}
+
+export interface WalletTransferCreate {
+  from_wallet: number;
+  to_wallet: number;
+  amount: string;
+  date?: string;
+  note?: string;
+}
+
+export interface WalletTypeRow {
+  type: string;
+  total_amount: string | null;
+  count: number;
+}
+
+export interface WalletAnalyticsRow {
+  id: number;
+  name: string;
+  code: string;
+  is_default: boolean;
+  is_active: boolean;
+  balance: string | null;
+  income_total: string | null;
+  income_count: number;
+  spending_total: string | null;
+  spending_count: number;
+  transfer_in: string | null;
+  transfer_out: string | null;
+  net: string | null;
+  spending_by_type: WalletTypeRow[];
+  income_by_type: WalletTypeRow[];
+}
+
+export interface WalletAnalytics {
+  date_from: string | null;
+  date_to: string | null;
+  group_by: "day" | "month";
+  can_view_balance: boolean;
+  totals: {
+    balance: string | null;
+    income_total: string | null;
+    income_count: number;
+    spending_total: string | null;
+    spending_count: number;
+    transfer_total: string | null;
+    net: string | null;
+  };
+  wallets: WalletAnalyticsRow[];
+  timeline: {
+    date: string;
+    income: Record<string, string | null>;
+    spending: Record<string, string | null>;
+  }[];
 }
 
 /* -------------------- Dashboard analytics -------------------- */
@@ -715,6 +820,8 @@ export interface DashboardWalletSummary {
   id: number;
   name: string;
   balance: string | null;
+  total_balance?: string | null;
+  wallets_count?: number;
   can_view_balance?: boolean;
   updated_at: string;
 }

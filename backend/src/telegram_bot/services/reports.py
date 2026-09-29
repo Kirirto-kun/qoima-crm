@@ -8,7 +8,7 @@ from src.incomes.models import Income
 from src.onboards.models import Task
 from src.spendings.models import Spending
 from src.telegram_bot.services.parser import ParsedCommand
-from src.wallets.models import Wallet
+from src.wallets.services import wallet_analytics
 
 
 ZERO = Decimal("0.00")
@@ -30,17 +30,18 @@ class ReportBuilder:
         income_total = self._sum_amount(incomes)
         spending_total = self._sum_amount(spendings)
         net_total = income_total - spending_total
-        wallet = Wallet.default()
+        wallets = wallet_analytics(date_from=date_from, date_to=date_to)
 
         lines = [
             f"Report: {date_from.isoformat()} - {date_to.isoformat()}",
             "",
-            f"Wallet:   {self._money(wallet.balance)} KZT",
+            f"Wallets:  {self._money(wallets['totals']['balance'])} KZT",
             f"Income:   {self._money(income_total)} KZT",
             f"Spending: {self._money(spending_total)} KZT",
             f"Net:      {self._money(net_total)} KZT",
             "",
         ]
+        lines.extend(self._wallets_section(wallets))
         lines.extend(self._type_section("Income by type", incomes, "amount"))
         lines.extend(self._type_section("Spending by type", spendings, "amount"))
         lines.extend(
@@ -55,6 +56,30 @@ class ReportBuilder:
         lines.extend(self._tasks_section(tasks, group_by, date_from, date_to))
 
         return "\n".join(lines).strip()
+
+    def _wallets_section(self, analytics) -> list[str]:
+        rows = [
+            row
+            for row in analytics["wallets"]
+            if row["is_active"]
+            or Decimal(row["income_total"]) or Decimal(row["spending_total"])
+        ]
+
+        if not rows:
+            return []
+
+        lines = ["By wallet"]
+
+        for row in rows:
+            star = "*" if row["is_default"] else " "
+            lines.append(
+                f"{star}{row['name'][:14]:14} {self._money(row['balance'])} KZT "
+                f"(+{self._money(row['income_total'])} / "
+                f"-{self._money(row['spending_total'])})"
+            )
+
+        lines.append("")
+        return lines
 
     def _date_range(self, command: ParsedCommand) -> tuple[date, date, str]:
         today = timezone.localdate()

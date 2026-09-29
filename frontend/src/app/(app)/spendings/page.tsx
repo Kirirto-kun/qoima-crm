@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Topbar } from "@/components/app-shell/topbar";
@@ -9,7 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Table, THead, TR, TH, TD } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { spendings } from "@/lib/endpoints";
+import { spendings, wallets } from "@/lib/endpoints";
+import { usePagedList } from "@/lib/use-paged-list";
+import { LoadMore } from "@/components/load-more";
+import { WalletBreakdown } from "@/components/wallet-breakdown";
 import { typeMetaForSpending } from "@/lib/spending-type-meta";
 import { formatCurrency, formatDate, cn, plural } from "@/lib/utils";
 import { asApiError } from "@/lib/api";
@@ -37,6 +40,7 @@ import {
   Trash2,
   AlertTriangle,
   X,
+  Wallet as WalletIcon,
 } from "lucide-react";
 
 function colorFor(type: string): string {
@@ -67,20 +71,36 @@ export default function SpendingsPage() {
   const [activeType, setActiveType] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
+  const [activeWallet, setActiveWallet] = useState<number | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const c = useChartColors();
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const filters: SpendingFilters = useMemo(
     () => ({
       type: activeType ?? undefined,
       from_date: fromDate || undefined,
       to_date: toDate || undefined,
+      wallet: activeWallet ?? undefined,
+      search: debouncedSearch || undefined,
     }),
-    [activeType, fromDate, toDate]
+    [activeType, fromDate, toDate, activeWallet, debouncedSearch]
   );
 
-  const listQ = useQuery({
-    queryKey: ["spendings", filters],
-    queryFn: () => spendings.list(filters),
+  const paged = usePagedList({
+    queryKey: ["spendings", "paged", filters],
+    fetchPage: (page) => spendings.page(filters, page),
+    enabled: allowed,
+  });
+  const listQ = paged.query;
+
+  const walletsQ = useQuery({
+    queryKey: ["wallets"],
+    queryFn: wallets.list,
     enabled: allowed,
   });
 
@@ -90,21 +110,9 @@ export default function SpendingsPage() {
     enabled: allowed,
   });
 
-  const all = useMemo(() => listQ.data ?? [], [listQ.data]);
+  // Filters and search run on the server; pages are appended on demand.
+  const filtered = paged.items;
 
-  // Client-side search on top of server-side filters (backend has no text search).
-  const filtered = useMemo(() => {
-    if (!search.trim()) return all;
-    const t = search.toLowerCase();
-    return all.filter(
-      (s) =>
-        s.name.toLowerCase().includes(t) ||
-        s.type.toLowerCase().includes(t) ||
-        (s.note ?? "").toLowerCase().includes(t)
-    );
-  }, [all, search]);
-
-  // Use analytics for totals so summary stays accurate even on huge datasets.
   const analytics = analyticsQ.data;
   const totalAmount = Number(analytics?.total.total_amount ?? 0);
   const totalCount = analytics?.total.count ?? 0;
@@ -128,7 +136,9 @@ export default function SpendingsPage() {
     [analytics]
   );
 
-  const filtersActive = Boolean(activeType || fromDate || toDate || search);
+  const filtersActive = Boolean(
+    activeType || fromDate || toDate || search || activeWallet
+  );
 
   if (!allowed) {
     return (
@@ -190,13 +200,17 @@ export default function SpendingsPage() {
           />
           <Stat
             label="Самый крупный"
-            value={formatCurrency(
-              filtered.length
-                ? Math.max(...filtered.map((s) => Number(s.amount)))
-                : 0
-            )}
+            value={formatCurrency(Number(analytics?.total.max_amount ?? 0))}
           />
         </section>
+
+        <WalletBreakdown
+          rows={analytics?.by_wallet ?? []}
+          wallets={walletsQ.data ?? []}
+          active={activeWallet}
+          onSelect={setActiveWallet}
+          verb="потрачено"
+        />
 
         {/* Filters row */}
         <section className="flex flex-col md:flex-row md:items-end gap-3 mb-6 anim-fade">
@@ -243,6 +257,7 @@ export default function SpendingsPage() {
                 setFromDate("");
                 setToDate("");
                 setSearch("");
+                setActiveWallet(null);
               }}
             >
               <X className="h-3.5 w-3.5" />
@@ -464,8 +479,8 @@ export default function SpendingsPage() {
             <span className="text-[12px] text-ink-3">
               {listQ.isLoading
                 ? "Загрузка…"
-                : `${filtered.length} ${plural(
-                    filtered.length,
+                : `${paged.total} ${plural(
+                    paged.total,
                     "запись",
                     "записи",
                     "записей"
@@ -477,6 +492,7 @@ export default function SpendingsPage() {
               <TR>
                 <TH>Название</TH>
                 <TH>Категория</TH>
+                <TH className="hidden sm:table-cell">Кошелёк</TH>
                 <TH className="text-right">Сумма</TH>
                 <TH className="hidden md:table-cell">Дата</TH>
                 <TH className="hidden md:table-cell">Заметка</TH>
@@ -494,13 +510,21 @@ export default function SpendingsPage() {
               ))}
               {!listQ.isLoading && filtered.length === 0 && (
                 <TR>
-                  <TD colSpan={6} className="text-center text-ink-4 py-12">
+                  <TD colSpan={7} className="text-center text-ink-4 py-12">
                     Ничего не найдено.
                   </TD>
                 </TR>
               )}
             </tbody>
           </Table>
+          <LoadMore
+            shown={filtered.length}
+            total={paged.total}
+            hasMore={paged.hasMore}
+            onMore={paged.loadMore}
+            onAll={paged.loadAll}
+            loading={paged.isLoadingMore}
+          />
         </Panel>
       </main>
     </>
@@ -522,6 +546,9 @@ function SpendingRow({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["spendings"] });
       qc.invalidateQueries({ queryKey: ["spendings-analytics"] });
+      qc.invalidateQueries({ queryKey: ["wallets"] });
+      qc.invalidateQueries({ queryKey: ["wallets-logs"] });
+      qc.invalidateQueries({ queryKey: ["wallets-analytics"] });
       toast.success("Запись удалена.");
     },
     onError: (err) => toast.error(asApiError(err).message),
@@ -540,10 +567,20 @@ function SpendingRow({
           {labelFor(s.type)}
         </Badge>
       </TD>
-      <TD className="text-right font-medium tabular-nums">
+      <TD className="hidden sm:table-cell">
+        {s.wallet_name ? (
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-2 whitespace-nowrap">
+            <WalletIcon className="h-3.5 w-3.5 text-ink-4" />
+            {s.wallet_name}
+          </span>
+        ) : (
+          <span className="text-ink-4">—</span>
+        )}
+      </TD>
+      <TD className="text-right font-medium tabular-nums whitespace-nowrap">
         {formatCurrency(s.amount)}
       </TD>
-      <TD className="hidden md:table-cell text-ink-3 tabular-nums">{formatDate(s.date_spend)}</TD>
+      <TD className="hidden md:table-cell text-ink-3 tabular-nums whitespace-nowrap">{formatDate(s.date_spend)}</TD>
       <TD className="hidden md:table-cell text-ink-3 max-w-[140px] sm:max-w-[280px] truncate">{s.note || "—"}</TD>
       <TD>
         {showActions && (

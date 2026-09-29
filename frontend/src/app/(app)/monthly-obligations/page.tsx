@@ -29,6 +29,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { WalletPicker } from "@/components/wallet-picker";
 
 const TYPE_SUGGESTIONS = [
   "Зарплаты",
@@ -287,7 +288,9 @@ function MonthlyObligationRow({
       qc.invalidateQueries({ queryKey: ["monthly-obligations"] });
       qc.invalidateQueries({ queryKey: ["monthly-obligations-analytics"] });
       qc.invalidateQueries({ queryKey: ["spendings"] });
-      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["wallets"] });
+      qc.invalidateQueries({ queryKey: ["wallets-logs"] });
+      qc.invalidateQueries({ queryKey: ["wallets-analytics"] });
       toast.success(
         item.is_excluded_current_month
           ? "Исключение отменено."
@@ -337,6 +340,7 @@ function MonthlyObligationRow({
           </span>
           <span className="text-[12px] tabular-nums">
             след. {formatDate(item.due_date)}
+            {item.wallet_name ? ` · ${item.wallet_name}` : ""}
           </span>
         </div>
       </TD>
@@ -421,6 +425,7 @@ function MonthlyObligationDialog({
   const [chargeDay, setChargeDay] = useState(String(initial?.charge_day ?? 1));
   const [note, setNote] = useState(initial?.note ?? "");
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
+  const [wallet, setWallet] = useState<number | null>(initial?.wallet ?? null);
   const chargeDayNumber = Number(chargeDay);
 
   const save = useMutation({
@@ -432,6 +437,7 @@ function MonthlyObligationDialog({
         charge_day: chargeDayNumber,
         is_active: isActive,
         note,
+        wallet,
       };
       if (initial && chargeDayNumber === initial.charge_day) {
         payload.due_date = initial.due_date;
@@ -511,6 +517,11 @@ function MonthlyObligationDialog({
               required
             />
           </Field>
+          <WalletPicker
+            label="Списывать с кошелька"
+            value={wallet}
+            onChange={setWallet}
+          />
           <Field label="Заметка">
             <Input
               value={note}

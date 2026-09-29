@@ -21,6 +21,10 @@ import { Loader2, Plus, Wallet as WalletIcon } from "lucide-react";
 
 const schema = z.object({
   name: z.string().min(1, "Укажите название."),
+  code: z
+    .string()
+    .max(32, "Не длиннее 32 символов.")
+    .regex(/^[\p{L}\p{N}_-]*$/u, "Одно слово: буквы, цифры, - или _."),
   balance: z
     .string()
     .min(1, "Введите начальный остаток.")
@@ -55,6 +59,7 @@ export function WalletFormDialog({
     resolver: zodResolver(schema),
     defaultValues: {
       name: initial?.name ?? "",
+      code: initial?.code ?? "",
       balance: initial?.balance ?? "0",
       is_default: initial?.is_default ?? false,
       is_active: initial?.is_active ?? true,
@@ -65,6 +70,7 @@ export function WalletFormDialog({
     if (!open) return;
     reset({
       name: initial?.name ?? "",
+      code: initial?.code ?? "",
       balance: initial?.balance ?? "0",
       is_default: initial?.is_default ?? false,
       is_active: initial?.is_active ?? true,
@@ -78,6 +84,7 @@ export function WalletFormDialog({
     mutationFn: async (values: FormValues) => {
       const payload = {
         name: values.name.trim(),
+        code: values.code.trim().toLowerCase(),
         is_default: values.is_default ?? false,
         is_active: values.is_active ?? true,
       };
@@ -92,6 +99,7 @@ export function WalletFormDialog({
       qc.invalidateQueries({ queryKey: ["wallets"] });
       qc.invalidateQueries({ queryKey: ["wallets-current"] });
       qc.invalidateQueries({ queryKey: ["wallets-logs"] });
+      qc.invalidateQueries({ queryKey: ["wallets-analytics"] });
       qc.invalidateQueries({ queryKey: ["dashboard-analytics"] });
       toast.success(initial ? "Кошелёк обновлён." : "Кошелёк создан.");
       setOpen(false);
@@ -135,6 +143,22 @@ export function WalletFormDialog({
           </Field>
 
           <Field
+            label="Код для Telegram"
+            hint={
+              errors.code?.message ??
+              "Короткое слово для бота: /spending 5000 <код> такси. Пусто — создастся из названия."
+            }
+          >
+            <Input
+              {...register("code")}
+              placeholder="например, cash или kaspi"
+              autoComplete="off"
+              className="font-mono"
+              aria-invalid={!!errors.code}
+            />
+          </Field>
+
+          <Field
             label={initial ? "Текущий остаток (₸)" : "Начальный остаток (₸)"}
             hint={errors.balance?.message}
           >
@@ -173,7 +197,7 @@ export function WalletFormDialog({
               <div className="flex flex-col leading-tight">
                 <span className="text-[13px] text-ink">Основной кошелёк</span>
                 <span className="text-[11px] text-ink-3">
-                  Все доходы и расходы идут в этот кошелёк
+                  Выбирается по умолчанию для новых доходов и расходов
                 </span>
               </div>
               <Switch

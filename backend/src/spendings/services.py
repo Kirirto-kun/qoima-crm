@@ -21,6 +21,7 @@ class MonthlyObligationCharge:
     amount: Decimal
     type: str
     wallet_balance: Decimal
+    wallet_name: str = ""
 
 
 def next_due_date_for_day(charge_day: int, today=None) -> date:
@@ -166,6 +167,7 @@ def _charge_obligation(obligation_id: int, today: date):
                     amount=obligation.amount,
                     date_spend=obligation.due_date,
                     note=_spending_note(obligation),
+                    wallet=obligation.wallet,
                 )
                 wallet, _ = record_spending_created(
                     spending,
@@ -182,6 +184,7 @@ def _charge_obligation(obligation_id: int, today: date):
                         amount=spending.amount,
                         type=spending.type,
                         wallet_balance=wallet.balance,
+                        wallet_name=wallet.name,
                     )
                 )
 
@@ -256,20 +259,23 @@ def send_monthly_obligation_notification(charges, *, today: date):
     ]
 
     for charge in charges[:10]:
+        wallet = f" · {charge.wallet_name}" if charge.wallet_name else ""
         lines.append(
             f"- {charge.obligation_name}: {_money(charge.amount)} ₸ "
-            f"({charge.spending_date.isoformat()})"
+            f"({charge.spending_date.isoformat()}){wallet}"
         )
 
     if len(charges) > 10:
         lines.append(f"...и еще {len(charges) - 10}")
 
-    lines.extend(
-        [
-            "",
-            f"Баланс кошелька: {_money(charges[-1].wallet_balance)} ₸",
-        ]
-    )
+    # Last known balance of every wallet that was charged.
+    balances = {}
+    for charge in charges:
+        balances[charge.wallet_name or "Кошелёк"] = charge.wallet_balance
+
+    lines.append("")
+    for wallet_name, balance in balances.items():
+        lines.append(f"Баланс «{wallet_name}»: {_money(balance)} ₸")
 
     sent = TelegramClient().send_message(chat_id, "\n".join(lines))
     return {"sent": sent, "chat_id": chat_id}
@@ -313,6 +319,7 @@ def _result(*, today: date, charges, telegram):
                 "amount": charge.amount,
                 "type": charge.type,
                 "wallet_balance": charge.wallet_balance,
+                "wallet_name": charge.wallet_name,
             }
             for charge in charges
         ],
